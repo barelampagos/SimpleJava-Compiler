@@ -1,0 +1,556 @@
+options {
+  IGNORE_CASE=true;
+}
+
+PARSER_BEGIN(simplejava)
+
+public class simplejava {
+
+}
+
+PARSER_END(simplejava)
+
+  /*-----------------------------------------------------------------------*/
+  //  Tokens
+  //
+  /*-----------------------------------------------------------------------*/
+
+    TOKEN_MGR_DECLS :
+    {
+    	public static int numcomments = 0;
+    }
+
+    SKIP :
+    {
+        	< " " >
+    |    	< "\n">
+    |    	< "\t">
+    |		  < "//" (~["\n"])* "\n" >
+    |		  < "/*" > { numcomments++; SwitchTo(IN_COMMENT);}
+
+    }
+
+    <IN_COMMENT>
+    SKIP :
+    {
+    	   < "/*" > { numcomments++;}
+    |	   < "*/" > { numcomments--; if (numcomments == 0) SwitchTo(DEFAULT);}
+    |	   < ~[]>
+    }
+
+    //  Keywords
+    TOKEN :
+    {
+    	< ELSE: "else">
+    |	< FOR: "for">
+    |	< CLASS: "class">
+    |	< DO: "do">
+    |	< FALSE: "false">
+    |	< IF: "if">
+    |	< TRUE: "true">
+    |	< WHILE: "while">
+    |	< RETURN: "return">
+    |	< NEW: "new">
+    |	< INTEGER_LITERAL: (["0"-"9"])+>
+    |	< IDENTIFIER: ["A"-"Z"](["A"-"Z","0"-"9","_"])* >
+
+    }
+
+    //  Symbols
+    TOKEN :
+    {
+    	< MINUS: "-">
+    |	< MULTIPLY: "*">
+    |	< DIVIDE: "/">
+    |	< LEFTBRACKET: "[">
+    |	< RIGHTBRACKET: "]">
+    |	< LEFTBRACE: "{">
+    |	< RIGHTBRACE: "}">
+    |	< LEFTPARENTHESIS: "(">
+    |	< RIGHTPARENTHESIS: ")">
+    |	< PERIOD: ".">
+    |	< COMMA: ",">
+    |	< EQUAL: "==">
+    |	< NOTEQUAL: "!=">
+    |	< LESSTHAN: "<">
+    |	< GREATERTHAN: ">">
+    |	< LESSTHANOREQUAL: "<=">
+    |	< GREATERTHANOREQUAL: ">=">
+    |	< AND: "&&">
+    |	< OR: "||">
+    |	< NOT: "!">
+    |	< INCREMENT: "++">
+    | < DECREMENT: "--">
+    |	< PLUS: "+" >
+    |	< SEMICOLON: ";">
+    |	< GETS: "=">
+    }
+
+  /*-----------------------------------------------------------------------*/
+  //  Statement
+  //
+  /*-----------------------------------------------------------------------*/
+
+    ASTStatement statement() :
+    {
+        ASTStatement s = null;
+    }
+    {
+        /* Checks all statements here */
+
+        s = blockStatement()    { return s; }
+    |   LOOKAHEAD(2) s = variableDeclarationStatement()   { return s; }
+    |   LOOKAHEAD(2) s = functionCallStatement()      { return s; }
+    |   s = variableStatement() { return s; }
+    |   s = ifStatement() { return s; }
+    |   s = whileStatement()  { return s; }
+    |   s = doWhileStatement()  { return s; }
+    |   s = forStatement()  { return s; }
+    |   s = returnStatement() { return s; }
+    |   s = emptyStatement()  { return s; }
+
+    }
+
+    ASTStatements blockStatement() :
+    {
+        ASTStatements statements = new ASTStatements();
+        ASTStatement statement = null;
+    }
+    {
+        <LEFTBRACE>
+        (statement = statement() {statements.addElement(statement); })*
+        <RIGHTBRACE>
+
+        { return statements;}
+    }
+
+    ASTAssignmentStatement variableStatement() :
+    {
+        ASTVariable variable = null;
+        ASTAssignmentStatement statement = null;
+        ASTOperatorExpression opEx = null;
+    }
+    {
+        variable = variable()
+        (statement = assignmentStatement() { statement.setvariable(variable); }
+        | opEx = incDecStatement()
+
+        { opEx.setleft(new ASTVariableExpression(variable, variable.line())) ;
+          statement = new ASTAssignmentStatement(variable, opEx, variable.line());
+        }
+
+        )
+
+        { return statement; }
+    }
+
+    ASTAssignmentStatement assignmentStatement() :
+    {
+        ASTExpression value = null;
+        Token op = null;
+    }
+    {
+        op = <GETS> value = expression() (<SEMICOLON>)?
+
+        { return new ASTAssignmentStatement(null, value, op.beginLine);}
+    }
+
+    ASTOperatorExpression incDecStatement() :
+    {
+        ASTOperatorExpression val = null;
+        ASTExpression incDec = null;
+        Token t = null;
+        int operator = 0;
+    }
+    {
+        ( t = <INCREMENT>  { operator = 1; }
+        | t = <DECREMENT>  { operator = 2; }
+        )
+
+        {
+        incDec = new ASTIntegerLiteral(1, t.beginLine);
+
+        val = new ASTOperatorExpression(null, incDec, operator, t.beginLine);
+        }
+        (<SEMICOLON>)?
+
+        { return val; }
+    }
+
+
+    ASTVariableDefStatement variableDeclarationStatement() :
+    {
+        Token type = null;
+        Token name = null;
+        ASTExpression init = null;
+        int arraydimension = 0;
+    }
+    {
+        type = <IDENTIFIER> name = <IDENTIFIER>
+        (<LEFTBRACKET> <RIGHTBRACKET> { arraydimension++;})*
+        (<GETS> init = expression())? <SEMICOLON>
+
+        {
+          if (init == null && arraydimension == 0) {
+              return new ASTVariableDefStatement(type.image, name.image, name.beginLine);
+          } else if (init == null && arraydimension > 0) {
+              return new ASTVariableDefStatement(type.image, name.image, arraydimension, name.beginLine);
+          } else if (init != null && arraydimension == 0) {
+              return new ASTVariableDefStatement(type.image, name.image, init, name.beginLine);
+          } else {
+              return new ASTVariableDefStatement(type.image, name.image, arraydimension, init, name.beginLine);
+          }
+
+        }
+    }
+
+    ASTIfStatement ifStatement() :
+    {
+        ASTExpression test = null;
+        ASTStatement then = null;
+        ASTStatement elseStatement = null;
+        Token op = null;
+    }
+    {
+        op = <IF> <LEFTPARENTHESIS> test = expression() <RIGHTPARENTHESIS>
+        then = statement() (<ELSE> elseStatement = statement())?
+
+        { return new ASTIfStatement(test, then, elseStatement, op.beginLine); }
+    }
+
+
+    ASTWhileStatement whileStatement() :
+    {
+        ASTExpression test = null;
+        ASTStatement body = null;
+        Token op = null;
+    }
+    {
+        op = <WHILE> <LEFTPARENTHESIS> test = expression()
+        <RIGHTPARENTHESIS> body = statement()
+
+        { return new ASTWhileStatement(test, body, op.beginLine); }
+    }
+
+    ASTDoWhileStatement doWhileStatement() :
+    {
+        ASTExpression test = null;
+        ASTStatement body = null;
+        Token op = null;
+    }
+    {
+        op = <DO> body = statement() <WHILE> <LEFTPARENTHESIS>
+        test = expression() <RIGHTPARENTHESIS> <SEMICOLON>
+
+        { return new ASTDoWhileStatement(test, body, op.beginLine); }
+    }
+
+    ASTForStatement forStatement() :
+    {
+        ASTStatement init = null;
+        ASTExpression test = null;
+        ASTStatement incr = null;
+        ASTStatement body = null;
+        Token op = null;
+    }
+    {
+        op = <FOR> <LEFTPARENTHESIS>
+        init = statement()
+        test = expression() <SEMICOLON>
+        incr = statement() <RIGHTPARENTHESIS>
+        body = statement()
+
+        { return new ASTForStatement(init, test, incr, body, op.beginLine);}
+    }
+
+    ASTFunctionCallStatement functionCallStatement() :
+    {
+        ASTFunctionCallStatement funcCall = null;
+        Token name = null;
+        ASTExpression formal = null;
+    }
+    {
+        name = <IDENTIFIER> <LEFTPARENTHESIS> { funcCall = new ASTFunctionCallStatement(name.image, name.beginLine); }
+        (formal = arguments() { funcCall.addElement(formal); } )*
+        <RIGHTPARENTHESIS> <SEMICOLON>
+
+        { return funcCall;}
+    }
+
+    ASTReturnStatement returnStatement() :
+    {
+        ASTExpression value = null;
+        Token op = null;
+    }
+    {
+        op = <RETURN> (value = expression())? <SEMICOLON>
+
+        {return new ASTReturnStatement(value, op.beginLine); }
+    }
+
+    ASTEmptyStatement emptyStatement() :
+    {
+        Token op = null;
+    }
+    {
+        op = <SEMICOLON> { return new ASTEmptyStatement(op.beginLine); }
+    }
+
+  /*-----------------------------------------------------------------------*/
+  //  Expression
+  //
+  /*-----------------------------------------------------------------------*/
+
+
+
+    ASTExpression expression():
+    {
+        ASTExpression exp = null, exp2 = null;
+        Token t = null;
+    }
+    {
+        exp = expression0() (t = <OR> exp2 = expression0() { exp = new ASTOperatorExpression(exp, exp2, t.image, exp.line());})*
+        { return exp; }
+    }
+
+    Token compareOps():
+    {
+        Token t;
+    }
+    {
+        t = <EQUAL>   { return t; }
+    |   t = <NOTEQUAL>    { return t; }
+    |   t = <LESSTHAN>    { return t; }
+    |   t = <GREATERTHAN>   { return t; }
+    |   t = <LESSTHANOREQUAL>   { return t; }
+    |   t = <GREATERTHANOREQUAL>    { return t; }
+
+
+    }
+
+    ASTExpression expression0():
+    {
+        ASTExpression exp = null, exp2 = null;
+        Token t;
+    }
+    {
+        exp = expression1() (t = <AND> exp2 = expression1() { exp = new ASTOperatorExpression(exp, exp2, t.image, exp.line());})*
+        { return exp; }
+    }
+
+    ASTExpression expression1():
+    {
+        ASTExpression exp = null, exp2 = null;
+        Token t;
+    }
+    {
+        exp = expression2() (t = compareOps() exp2 = expression2() { exp = new ASTOperatorExpression(exp, exp2, t.image, exp.line());})*
+        { return exp; }
+    }
+
+
+    ASTExpression expression2():
+    {
+        ASTExpression exp = null, exp2 = null;
+        Token t;
+    }
+    {
+        exp = expression3() ((t = <PLUS> | t = <MINUS>) exp2 = expression3() { exp = new ASTOperatorExpression(exp, exp2, t.image, exp.line()); })*
+        { return exp; }
+    }
+
+    ASTExpression expression3():
+    {
+        ASTExpression exp = null, exp2 = null;
+        Token t;
+    }
+    {
+        exp = expression4() ((t = <MULTIPLY> | t = <DIVIDE>) exp2 = expression4() { exp = new ASTOperatorExpression(exp, exp2, t.image, exp.line()); })*
+        { return exp; }
+    }
+
+    ASTExpression expression4():
+    {
+        ASTExpression exp = null, zero = null;
+        Token t = null, t0 = null;
+    }
+    {
+
+        t = <NOT> exp = expression() { return new ASTUnaryOperatorExpression(exp, ASTUnaryOperatorExpression.NOT, t.beginLine); }
+    |   t = <MINUS> exp = expression() { zero = new ASTIntegerLiteral(0, t.beginLine); } { return new ASTOperatorExpression(zero, exp, ASTOperatorExpression.MINUS, t.beginLine); }
+    |   <LEFTPARENTHESIS> exp = expression() <RIGHTPARENTHESIS> { return exp;}
+    |   exp = term() { return exp; }
+
+
+    }
+
+    ASTExpression term():
+    {
+        ASTExpression exp = null;
+        ASTVariable var = null;
+        Token t;
+        int array = 0;
+        ASTVariable v = null;
+    }
+    {
+        t = <INTEGER_LITERAL> { return new ASTIntegerLiteral(Integer.parseInt(t.image), t.beginLine); }
+    |   t = <TRUE> { return new ASTBooleanLiteral(true, t.beginLine); }
+    |   t = <FALSE> { return new ASTBooleanLiteral(false, t.beginLine); }
+    |   LOOKAHEAD(3) <NEW> t = <IDENTIFIER> <LEFTPARENTHESIS> (arguments())* <RIGHTPARENTHESIS> { return new ASTNewClassExpression(t.image, t.beginLine); }
+    |   <NEW> t = <IDENTIFIER> (<LEFTBRACKET> (exp = expression())? <RIGHTBRACKET> { array++;})* { return new ASTNewArrayExpression(t.image, exp, array, t.beginLine);}
+    |   LOOKAHEAD(2) exp = functionCallExpression() {return exp;}
+    |   var = variable() { return new ASTVariableExpression(var, var.line()); }
+    }
+
+    ASTExpression functionCallExpression() :
+    {
+        ASTExpression exp = null;
+        Token t;
+        ASTFunctionCallExpression fexp = null;
+    }
+    {
+        t = <IDENTIFIER> { fexp = new ASTFunctionCallExpression(t.image, t.beginLine); }
+        <LEFTPARENTHESIS> (exp = arguments() {fexp.addElement(exp);})* <RIGHTPARENTHESIS>
+        { return fexp; }
+
+    }
+
+    ASTExpression arguments() :
+    {
+        ASTExpression exp = null;
+    }
+    {
+        exp = expression() (<COMMA>)?
+
+        { return exp; }
+    }
+
+    ASTVariable variable():
+    {
+        Token name = null;
+        ASTVariable var = null;
+        ASTExpression expression = null;
+    }
+    {
+        name = <IDENTIFIER>  { var = new ASTBaseVariable(name.image, name.beginLine); }
+        ( <PERIOD> name = <IDENTIFIER> { var = new ASTClassVariable(var, name.image, name.beginLine);}
+        | <LEFTBRACKET> expression = expression() <RIGHTBRACKET> { var = new ASTArrayVariable(var, expression, name.beginLine); })*
+
+        { return var; }
+    }
+
+
+  /*-----------------------------------------------------------------------*/
+  //  Declarations
+  //
+  /*-----------------------------------------------------------------------*/
+
+    ASTClass classDeclaration() :
+    {
+        Token name = null;
+        ASTInstanceVariableDef var = null;
+        ASTInstanceVariableDefs vars = new ASTInstanceVariableDefs();
+    }
+    {
+        <CLASS> name = <IDENTIFIER> <LEFTBRACE>
+        (var = variableDefinition() { vars.addElement(var); })*
+        <RIGHTBRACE>
+
+        { return new ASTClass(name.image, vars, name.beginLine); }
+    }
+
+    ASTInstanceVariableDef variableDefinition() :
+    {
+        Token type = null;
+        Token name = null;
+        int arraydimension = 0;
+    }
+    {
+        // TODO: Expression
+        type = <IDENTIFIER> name = <IDENTIFIER> (<LEFTBRACKET> (expression())? <RIGHTBRACKET> { arraydimension++; })* <SEMICOLON>
+
+        {
+          if (arraydimension == 0) {
+            return new ASTInstanceVariableDef(type.image, name.image, name.beginLine);
+          }
+            return new ASTInstanceVariableDef(type.image, name.image, arraydimension, name.beginLine);
+        }
+    }
+
+    ASTFunctionDefinition functionDeclaration() :
+    {
+        Token type = null;
+        Token name = null;
+        ASTFormals formals = null;
+        ASTStatement body = null;
+    }
+    {
+        type = <IDENTIFIER> name = <IDENTIFIER> <LEFTPARENTHESIS>
+        formals = parameters() <RIGHTPARENTHESIS>
+        (<SEMICOLON> | body = statement())
+
+        {
+          if (body == null) {
+            return new ASTPrototype(type.image, name.image, formals, name.beginLine);
+          } else {
+            return new ASTFunction(type.image, name.image, formals, body, name.beginLine);
+          }
+        }
+    }
+
+    ASTFormals parameters():
+    {
+        ASTFormals formals = new ASTFormals();
+        ASTFormal formal = null;
+    }
+    {
+        (formal = parameter() { formals.addElement(formal); }
+        (<COMMA> formal = parameter() { formals.addElement(formal); })*)?
+
+        { return formals; }
+    }
+
+
+    ASTFormal parameter() :
+    {
+        Token type = null;
+        Token name = null;
+        int arraydimension = 0;
+    }
+    {
+        type = <IDENTIFIER> name = <IDENTIFIER>
+        (<LEFTBRACKET> <RIGHTBRACKET> { arraydimension++; })*
+
+        {
+          if (arraydimension == 0) {
+            return new ASTFormal(type.image, name.image, name.beginLine);
+          }
+            return new ASTFormal(type.image, name.image, arraydimension, name.beginLine);
+        }
+    }
+
+
+  /*-----------------------------------------------------------------------*/
+  //  Program
+  //
+  /*-----------------------------------------------------------------------*/
+    ASTProgram program() :
+    {
+        ASTClasses classes = new ASTClasses();
+        ASTFunctionDefinitions functions = new ASTFunctionDefinitions();
+
+        ASTClass c = null;
+        ASTFunctionDefinition function = null;
+    }
+    {
+        //  Each program will be zero or more declarations
+        //  (class definitions, function definitions, or function prototypes)
+        //  ending with an EOF token.
+
+        (
+        c = classDeclaration()          { classes.addElement(c); }
+        | function = functionDeclaration()  { functions.addElement(function); }
+        )* <EOF>
+
+        { return new ASTProgram(classes, functions, 0); }
+    }
