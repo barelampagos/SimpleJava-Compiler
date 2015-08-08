@@ -1,7 +1,7 @@
 #SimpleJava Compiler
 This project is a Compiler written to compile a simplified version of Java (simpleJava). It does so by
 generating MIPS32 assembly code, which can then be run in a MIPS simulator, like Spim. This project was completed
-in Spring 2014 by Bryan Relampagos and Junn Geronimo.
+in Spring 2015 by Bryan Relampagos and Junn Geronimo.
 
 
 #Usage
