@@ -1,7 +1,25 @@
 # SimpleJava Compiler
-This project is a Compiler written to compile a simplified version of Java (simpleJava). It does so by
-generating MIPS32 assembly code, which can then be run in a MIPS simulator, like Spim. This project was completed
-in Spring 2015 by Bryan Relampagos and Junn Geronimo.
+This project is a Compiler written to compile a simplified version of Java (simpleJava). Note that SimpleJava is similar to Java in many aspects, but it is non-object oriented. The compiler generates MIPS32 assembly code, which can then be run in a MIPS simulator, like Spim. This project was completed
+in 2015 by Bryan Relampagos and Junn Geronimo.
+
+#### An example of SimpleJava code
+```
+/* Factorial ... */
+
+int factorial(int x) {
+    if (x == 0)
+       return 1;
+    return x * factorial(x-1);
+}
+
+
+void main() {
+
+     int x = factorial(Read());
+     Print(x);
+     Println();
+}
+```
 
 # Lexical Analysis
 Lexical analysis is the conversion of an input file into a stream of valid tokens to be used. The SimpleJava Compiler is using [JavaCC](https://javacc.java.net/) (Java Compiler Compiler) in order to handle generating our Lexical Analyzer. The tokens are defined in simplejava.jj as a set of regular expressions, which is then used as input to JavaCC to generate a lexical analyzer.
@@ -80,12 +98,7 @@ In order to check for semantic errors, we traverse the abstract syntax trees mad
 * Function/Method Errors (i.e. bar(5, true) --> bar must be a function, parameters must be int & boolean)
 * Type Errors (i.e. +,-,* ,/ --> must be used with integers, myVar = 3 --> myVar must be of type Int)
 
-# Abstract Assembly Trees + Code Generation
-
-
 # Usage
-1. Navigate to folder via Terminal.
-
-2. java sjc <inputfile> will create <inputfile>.s
-
-3. Use spim on <inputfile>.s
+1. Clone this repository and navigate into it.
+2. ```java sjc [inputfile].sjava``` will generate [inputfile].s
+3. Use a MIPS processor simulator, such as SPIM, on [inputfile].s to run the assembly code.
